@@ -18,6 +18,7 @@ jobs:
 
     env:
       TIBERIUS_TEST_CONNECTION_STRING: "server=tcp:localhost,1433;user=SA;password=<YourStrong@Passw0rd>;TrustServerCertificate=true"
+      RUSTFLAGS: "-Dwarnings"
 
     steps:
       - uses: actions/checkout@v2
@@ -29,21 +30,16 @@ jobs:
       - uses: actions/cache@v2
         with:
           path: |
-            ~/.cache
-            ~/.cargo
-          key: ${{ runner.os }}-sccache-cargo
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Start SQL Server ${{matrix.database}}
         run: docker-compose -f docker-compose.yml up -d mssql-${{matrix.database}}
 
       - name: Install dependencies
         run: sudo apt install -y openssl libkrb5-dev
-
-      - name: Install sccache
-        run: |
-          cargo install sccache
-          echo "[build]" >> $HOME/.cargo/config
-          echo "rustc-wrapper = \"$HOME/.cargo/bin/sccache\"" >> $HOME/.cargo/config
 
       - name: Run tests
         run: cargo test ${{matrix.features}}
@@ -63,6 +59,7 @@ jobs:
 
     env:
       TIBERIUS_TEST_CONNECTION_STRING: "server=tcp:localhost,1433;user=SA;password=<YourStrong@Passw0rd>;TrustServerCertificate=true"
+      RUSTFLAGS: "-Dwarnings"
 
     steps:
       - uses: actions/checkout@v2
@@ -72,6 +69,14 @@ jobs:
           toolchain: ${{matrix.rust}}
 
       - uses: docker-practice/actions-setup-docker@master
+
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Start SQL Server ${{matrix.database}}
         run: docker-compose -f docker-compose.yml up -d mssql-${{matrix.database}}
