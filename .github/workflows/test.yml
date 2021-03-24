@@ -1,0 +1,67 @@
+name: Cargo tests
+on: [push]
+jobs:
+  cargo-test-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        database:
+          - 2017
+          - 2019
+        rust:
+          - stable
+        features:
+          - "--features=all"
+          - "--no-default-features --features=chrono"
+
+    runs-on: ubuntu-latest
+
+    env:
+      TIBERIUS_TEST_CONNECTION_STRING: "server=tcp:localhost,1433;user=SA;password=<YourStrong@Passw0rd>;TrustServerCertificate=true"
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{matrix.rust}}
+
+      - name: Start SQL Server ${{matrix.database}}
+        run: docker-compose -f docker-compose.yml up -d mssql-${{matrix.database}}
+
+      - name: Install dependencies
+        run: sudo apt install -y openssl libkrb5-dev
+
+      - name: Run tests
+        run: cargo test ${{matrix.features}}
+
+  cargo-test-macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        database:
+          - 2019
+        rust:
+          - stable
+        features:
+          - "--features=all,vendored-openssl"
+
+    runs-on: macos-latest
+
+    env:
+      TIBERIUS_TEST_CONNECTION_STRING: "server=tcp:localhost,1433;user=SA;password=<YourStrong@Passw0rd>;TrustServerCertificate=true"
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{matrix.rust}}
+
+      - uses: docker-practice/actions-setup-docker@master
+
+      - name: Start SQL Server ${{matrix.database}}
+        run: docker-compose -f docker-compose.yml up -d mssql-${{matrix.database}}
+
+      - name: Run tests
+        run: cargo test ${{matrix.features}}
