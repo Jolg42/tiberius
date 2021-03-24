@@ -1,7 +1,15 @@
 name: Cargo tests
-on: [push]
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
 jobs:
   cargo-test-linux:
+    runs-on: ubuntu-latest
+
     strategy:
       fail-fast: false
       matrix:
@@ -13,8 +21,6 @@ jobs:
         features:
           - "--features=all"
           - "--no-default-features --features=chrono"
-
-    runs-on: ubuntu-latest
 
     env:
       TIBERIUS_TEST_CONNECTION_STRING: "server=tcp:localhost,1433;user=SA;password=<YourStrong@Passw0rd>;TrustServerCertificate=true"
@@ -33,7 +39,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ matrix.features }}
 
       - name: Start SQL Server ${{matrix.database}}
         run: docker-compose -f docker-compose.yml up -d mssql-${{matrix.database}}
@@ -44,7 +50,140 @@ jobs:
       - name: Run tests
         run: cargo test ${{matrix.features}}
 
+  cargo-test-windows:
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        database:
+          - 2019
+        rust:
+          - stable
+        features:
+          - "--features=all"
+
+    env:
+      TIBERIUS_TEST_CONNECTION_STRING: "server=tcp:localhost,1433;user=SA;password=<YourStrong@Passw0rd>;TrustServerCertificate=true"
+      RUSTFLAGS: "-Dwarnings"
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Set required PowerShell modules
+        id: psmodulecache
+        uses: potatoqualitee/psmodulecache@v1
+        with:
+          modules-to-cache: SqlServer
+
+      - name: Setup PowerShell module cache
+        id: cacher
+        uses: actions/cache@v2
+        with:
+            path: ${{ steps.psmodulecache.outputs.modulepath }}
+            key: ${{ steps.psmodulecache.outputs.keygen }}
+
+      - name: Setup Chocolatey download cache
+        id: chococache
+        uses: actions/cache@v2
+        with:
+          path: C:\Users\runneradmin\AppData\Local\Temp\chocolatey\
+          key: chocolatey-install
+
+      - name: Setup Cargo build cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            C:\Users\runneradmin\.cargo\registry
+            C:\Users\runneradmin\.cargo\git
+            target
+          key: ${{ runner.os }}-cargo
+
+      - name: Install required PowerShell modules
+        if: steps.cacher.outputs.cache-hit != 'true'
+        shell: powershell
+        run: |
+            Set-PSRepository PSGallery -InstallationPolicy Trusted
+            Install-Module SqlServer -ErrorAction Stop
+
+      - name: Install SQL Server 2019
+        shell: powershell
+        run: |
+          choco install sql-server-2019
+
+      - name: Setup SQL Server 2019
+        shell: powershell
+        run: |
+          Import-Module 'sqlps'
+
+          [reflection.assembly]::LoadWithPartialName("Microsoft.SqlServer.Smo") | Out-Null
+          [reflection.assembly]::LoadWithPartialName("Microsoft.SqlServer.SqlWmiManagement") | Out-Null
+
+          $serverName = $env:COMPUTERNAME
+          $instanceName = "SQL2019"
+          $regInstance = "MSSQL15.SQL2019"
+
+          echo "server = $serverName, instance = $instanceName, reg = $regInstance"
+
+          $smo = 'Microsoft.SqlServer.Management.Smo.'
+          $wmi = new-object ($smo + 'Wmi.ManagedComputer')
+          $wmi
+
+          # Enable TCP/IP
+          echo "Enabling TCP/IP"
+          $uri = "ManagedComputer[@Name='$serverName']/ ServerInstance[@Name='$instanceName']/ServerProtocol[@Name='Tcp']"
+          $uri
+          $Tcp = $wmi.GetSmoObject($uri)
+          $Tcp.IsEnabled = $true
+          $Tcp.alter()
+          $Tcp
+
+          # Enable named pipes
+          echo "Enabling named pipes"
+          $uri = "ManagedComputer[@Name='$serverName']/ ServerInstance[@Name='$instanceName']/ServerProtocol[@Name='Np']"
+          $Np = $wmi.GetSmoObject($uri)
+          $Np.IsEnabled = $true
+          $Np.Alter()
+          $Np
+
+          # Set Alias
+          echo "Setting the alias"
+          New-Item HKLM:\SOFTWARE\Microsoft\MSSQLServer\Client -Name ConnectTo | Out-Null
+          Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\MSSQLServer\Client\ConnectTo -Name '(local)' -Value "DBMSSOCN,$serverName\$instanceName" | Out-Null
+
+          # Generate Certificate & use and trust it
+          echo "Generating certificate"
+          $cert = New-SelfSignedCertificate -DnsName $serverName,localhost -CertStoreLocation cert:\LocalMachine\My
+          Get-Item -Path "HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server\$regInstance\MSSQLServer\SuperSocketNetLib" | New-ItemProperty -Name Certificate -Value $cert.Thumbprint.ToLower() -Force
+          $rootStore = Get-Item cert:\LocalMachine\Root
+          $rootStore.Open("ReadWrite")
+          $rootStore.Add($cert)
+          $rootStore.Close();
+
+          # Bypass certificate (private key) permission errors by simply running as system
+          # DONT DO THIS IN PRODUCTION OR REAL WORLD USE, assign proper permissions to the private key!
+          echo "Bypassing certificate errors"
+          sc.exe config "MSSQL`$$instanceName" obj= "LocalSystem" password= "dummy"
+
+          # Start services
+          echo "Starting services"
+          Set-Service SQLBrowser -StartupType Manual
+          Start-Service SQLBrowser
+          Start-Service "MSSQL`$$instanceName"
+          # workaround appveyor failure that we first get a "Start-Service : Failed to start service" error
+          Start-Service "MSSQL`$$instanceName"
+
+      - name: Run checks
+        shell: powershell
+        run: cargo check --features all
+
   cargo-test-macos:
+    runs-on: macos-latest
+
     strategy:
       fail-fast: false
       matrix:
@@ -54,8 +193,6 @@ jobs:
           - stable
         features:
           - "--features=all,vendored-openssl"
-
-    runs-on: macos-latest
 
     env:
       TIBERIUS_TEST_CONNECTION_STRING: "server=tcp:localhost,1433;user=SA;password=<YourStrong@Passw0rd>;TrustServerCertificate=true"
@@ -76,7 +213,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo
 
       - name: Start SQL Server ${{matrix.database}}
         run: docker-compose -f docker-compose.yml up -d mssql-${{matrix.database}}
