@@ -7,17 +7,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        database:
-          - mssql-2017
-          - mssql-2019
+        database: [mssql-2017, mssql-2019]
+        rust: [stable, beta]
 
     env:
       TIBERIUS_TEST_CONNECTION_STRING: "server=tcp:localhost,1433;user=SA;password=<YourStrong@Passw0rd>;TrustServerCertificate=true"
 
     steps:
       - uses: actions/checkout@v2
-      - uses: cachix/install-nix-action@v12
+      - uses: actions-rs/toolchain@v1
         with:
-          nix_path: nixpkgs=channel:nixos-unstable
+          toolchain: ${{matrix.rust}}
       - run: docker-compose -f docker-compose.yml up -d ${{matrix.database}}
-      - run: nix-shell --run "cargo test"
+      - run: apt install -y openssl libkrb5-dev
+      - run: cargo test --features all

@@ -10,7 +10,5 @@ mkShell {
     clangStdenv
     llvmPackages.libclang
     kerberos
-    rustc
-    cargo
   ];
 }
