@@ -18,6 +18,7 @@ impl SqlBrowser for TcpStream {
         let addrs = net::lookup_host(builder.get_addr()).await?;
 
         for mut addr in addrs {
+            dbg!(&addr);
             if let Some(ref instance_name) = builder.instance_name {
                 // First resolve the instance to a port via the
                 // SSRP protocol/MS-SQLR protocol [1]
@@ -52,6 +53,7 @@ impl SqlBrowser for TcpStream {
                 let port = super::get_port_from_sql_browser_reply(buf, len, instance_name)?;
                 addr.set_port(port);
             };
+            dbg!(&addr);
 
             if let Ok(stream) = TcpStream::connect(addr).await {
                 stream.set_nodelay(true)?;

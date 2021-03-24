@@ -64,7 +64,8 @@ jobs:
           - "--features=all"
 
     env:
-      TIBERIUS_TEST_CONNECTION_STRING: "server=tcp:localhost,1433;user=SA;password=<YourStrong@Passw0rd>;TrustServerCertificate=true"
+      TIBERIUS_TEST_INSTANCE: "MSSQLSERVER"
+      TIBERIUS_TEST_CONNECTION_STRING: "server=tcp:127.0.0.1,1433;IntegratedSecurity=true;TrustServerCertificate=true"
 
     steps:
       - uses: actions/checkout@v2
@@ -123,10 +124,7 @@ jobs:
           [reflection.assembly]::LoadWithPartialName("Microsoft.SqlServer.SqlWmiManagement") | Out-Null
 
           $serverName = $env:COMPUTERNAME
-          $instanceName = "SQL2019"
-          $regInstance = "MSSQL15.SQL2019"
-
-          echo "server = $serverName, instance = $instanceName, reg = $regInstance"
+          $instanceName = "MSSQLSERVER"
 
           $smo = 'Microsoft.SqlServer.Management.Smo.'
           $wmi = new-object ($smo + 'Wmi.ManagedComputer')
@@ -151,11 +149,6 @@ jobs:
           $rootStore.Add($cert)
           $rootStore.Close();
 
-          # Bypass certificate (private key) permission errors by simply running as system
-          # DONT DO THIS IN PRODUCTION OR REAL WORLD USE, assign proper permissions to the private key!
-          echo "Bypassing certificate errors"
-          sc.exe config "MSSQL`$$instanceName" obj= "LocalSystem" password= "dummy"
-
           # Start services
           echo "Starting services"
           Set-Service SQLBrowser -StartupType Manual
@@ -163,9 +156,9 @@ jobs:
           net stop MSSQLSERVER
           net start MSSQLSERVER
 
-      - name: Run checks
+      - name: Run normal tests
         shell: powershell
-        run: cargo check --features all
+        run: cargo test --features all
 
   cargo-test-macos:
     runs-on: macos-latest
@@ -191,14 +184,6 @@ jobs:
           toolchain: ${{matrix.rust}}
 
       - uses: docker-practice/actions-setup-docker@master
-
-      - uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo
 
       - name: Start SQL Server ${{matrix.database}}
         run: docker-compose -f docker-compose.yml up -d mssql-${{matrix.database}}

@@ -40,12 +40,13 @@ fn get_port_from_sql_browser_reply(
         return Err(err);
     }
 
-    let response = std::str::from_utf8(&buf[3..len])?;
+    let response = dbg!(std::str::from_utf8(&buf[3..len]))?;
 
     let port: u16 = response
         .find("tcp;")
         .and_then(|pos| response[pos..].split(';').nth(1))
         .ok_or(err)
         .and_then(|val| Ok(val.parse()?))?;
+
     Ok(port)
 }
