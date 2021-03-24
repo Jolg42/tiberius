@@ -1,0 +1,8 @@
+name: test
+on: [push]
+jobs:
+  run-ls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: ls
