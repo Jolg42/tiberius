@@ -65,7 +65,6 @@ jobs:
 
     env:
       TIBERIUS_TEST_CONNECTION_STRING: "server=tcp:localhost,1433;user=SA;password=<YourStrong@Passw0rd>;TrustServerCertificate=true"
-      RUSTFLAGS: "-Dwarnings"
 
     steps:
       - uses: actions/checkout@v2
@@ -133,22 +132,11 @@ jobs:
           $wmi = new-object ($smo + 'Wmi.ManagedComputer')
           $wmi
 
-          # Enable TCP/IP
-          echo "Enabling TCP/IP"
-          $uri = "ManagedComputer[@Name='$serverName']/ ServerInstance[@Name='$instanceName']/ServerProtocol[@Name='Tcp']"
-          $uri
-          $Tcp = $wmi.GetSmoObject($uri)
-          $Tcp.IsEnabled = $true
-          $Tcp.alter()
-          $Tcp
-
-          # Enable named pipes
-          echo "Enabling named pipes"
-          $uri = "ManagedComputer[@Name='$serverName']/ ServerInstance[@Name='$instanceName']/ServerProtocol[@Name='Np']"
-          $Np = $wmi.GetSmoObject($uri)
-          $Np.IsEnabled = $true
-          $Np.Alter()
-          $Np
+          $wmi.ServerInstances.ServerProtocols | Select DisplayName, State, IsEnabled
+          $wmi.ServerInstances.ServerProtocols.Item(0).IsEnabled = $True
+          $wmi.ServerInstances.ServerProtocols.Item(1).IsEnabled = $True
+          $wmi.ServerInstances.ServerProtocols.Item(2).IsEnabled = $True
+          $wmi.ServerInstances.ServerProtocols | Select DisplayName, State, IsEnabled
 
           # Set Alias
           echo "Setting the alias"
@@ -158,7 +146,6 @@ jobs:
           # Generate Certificate & use and trust it
           echo "Generating certificate"
           $cert = New-SelfSignedCertificate -DnsName $serverName,localhost -CertStoreLocation cert:\LocalMachine\My
-          Get-Item -Path "HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server\$regInstance\MSSQLServer\SuperSocketNetLib" | New-ItemProperty -Name Certificate -Value $cert.Thumbprint.ToLower() -Force
           $rootStore = Get-Item cert:\LocalMachine\Root
           $rootStore.Open("ReadWrite")
           $rootStore.Add($cert)
@@ -173,9 +160,8 @@ jobs:
           echo "Starting services"
           Set-Service SQLBrowser -StartupType Manual
           Start-Service SQLBrowser
-          Start-Service "MSSQL`$$instanceName"
-          # workaround appveyor failure that we first get a "Start-Service : Failed to start service" error
-          Start-Service "MSSQL`$$instanceName"
+          net stop MSSQLSERVER
+          net start MSSQLSERVER
 
       - name: Run checks
         shell: powershell
@@ -196,7 +182,6 @@ jobs:
 
     env:
       TIBERIUS_TEST_CONNECTION_STRING: "server=tcp:localhost,1433;user=SA;password=<YourStrong@Passw0rd>;TrustServerCertificate=true"
-      RUSTFLAGS: "-Dwarnings"
 
     steps:
       - uses: actions/checkout@v2
