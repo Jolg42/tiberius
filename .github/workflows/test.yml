@@ -28,8 +28,10 @@ jobs:
 
       - uses: actions/cache@v2
         with:
-          path: ~/.cache
-          key: ${{ runner.os }}-sccache
+          path: |
+            ~/.cache
+            ~/.cargo
+          key: ${{ runner.os }}-sccache-cargo
 
       - name: Start SQL Server ${{matrix.database}}
         run: docker-compose -f docker-compose.yml up -d mssql-${{matrix.database}}
