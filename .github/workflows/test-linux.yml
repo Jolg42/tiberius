@@ -7,8 +7,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        database: [mssql-2017, mssql-2019]
+        database: [2017, 2019]
         rust: [stable, beta]
+        features:
+          - "--features=all"
+          - "--no-default-features --features chrono"
 
     env:
       TIBERIUS_TEST_CONNECTION_STRING: "server=tcp:localhost,1433;user=SA;password=<YourStrong@Passw0rd>;TrustServerCertificate=true"
@@ -18,6 +21,9 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: ${{matrix.rust}}
-      - run: docker-compose -f docker-compose.yml up -d ${{matrix.database}}
-      - run: apt install -y openssl libkrb5-dev
-      - run: cargo test --features all
+      - name: Start SQL Server ${{matrix.database}}
+        run: docker-compose -f docker-compose.yml up -d mssql-${{matrix.database}}
+      - name: Install dependencies
+        run: sudo apt install -y openssl libkrb5-dev
+      - name: Run tests
+        run: cargo test --features all
